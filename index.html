@@ -294,6 +294,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-s
 .cmsg .text ul{margin:6px 0 0 18px}
 .cmsg .text li{margin-bottom:3px}
 .cmsg.card-msg .text{width:100%;max-width:520px}
+.scroller{overflow-x:auto;max-width:100%}
 .mini-table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;min-width:0}
 .mini-table th,.mini-table td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
 .mini-table th{color:var(--muted);font-size:11px;text-transform:uppercase}
@@ -701,6 +702,7 @@ document.addEventListener("keydown",e=>{
 });
 
 function selectTask(task, silent){
+  formState.active = false;
   currentTask = task;
   document.querySelectorAll(".side-item[data-task]").forEach(b=>{
     b.classList.toggle("active", b.dataset.task===task);
@@ -735,6 +737,7 @@ function addMsg(role, html){
 
 function greet(){
   addMsg("bot", TASKS[currentTask].greeting);
+  if(currentTask==="status") addMsg("bot", buildAppsTableHTML());
   renderChips();
 }
 
@@ -750,7 +753,8 @@ function findAnswer(task, q){
     if(lower.includes(key) && key.length > bestLen){ best = key; bestLen = key.length; }
   }
   let text = best ? preset[best] : TASKS[task].default;
-  if(text === "__TABLE__") text = TABLE_HTML;
+  if(text === "__TABLE__") text = buildAppsTableHTML();
+  if(task === "status" && /обнов/i.test(lower)) text = buildStatusSummary();
   return text;
 }
 
@@ -760,6 +764,14 @@ function sendMessage(){
   addMsg("user", escapeHtml(q).replace(/\n/g,"<br>"));
   inputEl.value = "";
   chipsEl.innerHTML = "";
+  if(currentTask === "apply" && /заявк.*(гарант|аккредитив)/i.test(q)){
+    startAppForm(q);
+    return;
+  }
+  if(formState.active){
+    handleFormInput(q);
+    return;
+  }
   const t = typing();
   const delay = 700 + Math.min(q.length*12, 900);
   setTimeout(()=>{
@@ -796,6 +808,122 @@ function toast(msg){
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>toastEl.classList.remove("show"), 2600);
+}
+
+/* ========== Application form ========== */
+let formState = { active: false, type: "", step: 0, answers: {} };
+
+const FORM_FIELDS = [
+  { key: "princip",      label: "Укажите наименование ПРИНЦИПАЛА" },
+  { key: "benef",        label: "Укажите наименование Бенефициара" },
+  { key: "kind",         label: "Укажите ВИД — вид гарантируемых или аккредитивных обязательств" },
+  { key: "amount",       label: "Укажите СУММУ" },
+  { key: "currency",     label: "Укажите ВАЛЮТУ" },
+  { key: "period",       label: "ПЕРИОД ДЕЙСТВИЯ — выберите вариант или впишите свой (при необходимости добавьте «по «дд.мм.гггг»»)" },
+  { key: "deliveryDate", label: "ДАТА ПРЕДОСТАВЛЕНИЯ — выберите вариант или впишите свой" },
+  { key: "basis",        label: "ОСНОВАНИЕ ДЛЯ ПРЕДОСТАВЛЕНИЯ — укажите документы (договор/контракт №___, тендерная документация и т.п.)" },
+  { key: "format",       label: "ФОРМАТ И СПОСОБ НАПРАВЛЕНИЯ — выберите вариант или впишите свой" },
+  { key: "comment",      label: "КОММЕНТАРИЙ (при необходимости; введите «-», чтобы пропустить)", optional: true }
+];
+
+const PERIOD_CHOICES = [
+  "С даты выдачи (указанной в реквизитах)",
+  "С даты выдачи (соответствующей дате подписания УКЭП)",
+  "С даты или условия вступления в силу (по тексту)",
+  "С даты заключения договора/контракта"
+];
+const DATE_CHOICES = [
+  "Дата, когда должен быть предоставлен (указанная в реквизитах)",
+  "Дата, когда должен быть предоставлен (соответствующая дате подписания УКЭП)"
+];
+const FORMAT_CHOICES = [
+  "На бумажном носителе",
+  "В электронной форме посредством систем SWIFT/Sber FinLine/СПФС",
+  "Электронный документ, подписанный УКЭП, через сервис «Банковские гарантии» СББОЛ"
+];
+const FORM_CHOICES = { period: PERIOD_CHOICES, deliveryDate: DATE_CHOICES, format: FORMAT_CHOICES };
+
+function startAppForm(q){
+  formState = {
+    active: true,
+    type: /аккредитив/i.test(q) ? "Заявка на аккредитив" : "Заявка на банковскую гарантию",
+    step: 0,
+    answers: {}
+  };
+  askFormField();
+}
+
+function askFormField(){
+  const f = FORM_FIELDS[formState.step];
+  if(!f){ finishAppForm(); return; }
+  const n = formState.step + 1;
+  addMsg("bot", "<b>Заявка: " + escapeHtml(formState.type) + "</b><br>Шаг " + n + " из " + FORM_FIELDS.length + ". " + escapeHtml(f.label));
+  const choices = FORM_CHOICES[f.key];
+  if(choices) renderChoiceChips(choices); else chipsEl.innerHTML = "";
+}
+
+function renderChoiceChips(options){
+  chipsEl.innerHTML = "";
+  options.forEach(o=>{
+    const btn = document.createElement("button");
+    btn.className = "chip"; btn.textContent = o;
+    btn.onclick = ()=>{ inputEl.value = o; sendMessage(); };
+    chipsEl.appendChild(btn);
+  });
+}
+
+function handleFormInput(value){
+  const f = FORM_FIELDS[formState.step];
+  if(!f){ formState.active = false; return; }
+  if(!value.trim() && !f.optional){
+    addMsg("bot", "Поле не может быть пустым. " + f.label);
+    return;
+  }
+  formState.answers[f.key] = value.trim() || "—";
+  formState.step++;
+  askFormField();
+}
+
+function finishAppForm(){
+  formState.active = false;
+  const apps = loadApps();
+  const seq = (parseInt(localStorage.getItem("lukdoc_seq") || "2417", 10)) + 1;
+  localStorage.setItem("lukdoc_seq", String(seq));
+  const app = Object.assign({ id: "APP-" + seq, type: formState.type, status: "Направлена" }, formState.answers);
+  apps.push(app);
+  saveApps(apps);
+  formState.step = 0;
+  formState.answers = {};
+  toast("Заявка успешно отправлена ✔");
+  renderChips();
+  addMsg("bot", "✅ <b>Заявка успешно отправлена.</b><br>Номер: <b>" + app.id + "</b> — данные доступны в разделе «Статусы заявок».");
+}
+
+function loadApps(){
+  try{ return JSON.parse(localStorage.getItem("lukdoc_apps") || "[]"); }catch(e){ return []; }
+}
+function saveApps(apps){ localStorage.setItem("lukdoc_apps", JSON.stringify(apps)); }
+
+function buildAppsTableHTML(){
+  const apps = loadApps();
+  if(!apps.length) return "Заявок направлено не было.";
+  const keys = ["princip","benef","kind","amount","currency","period","deliveryDate","basis","format","comment"];
+  const headers = ["Наименование ПРИНЦИПАЛА","Наименование Бенефициара","Вид","Сумма","Валюта","Период действия","Дата предоставления","Основание для предоставления","Формат и способ направления","Комментарий","Статус"];
+  let rows = "";
+  apps.forEach(a=>{
+    const cells = keys.map(k=>"<td>" + escapeHtml(a[k] || "—") + "</td>").join("");
+    rows += "<tr>" + cells + "<td><span class='pill info'>" + escapeHtml(a.status) + "</span></td></tr>";
+  });
+  return "<div class='scroller'><table class='mini-table'><thead><tr>" +
+    headers.map(h=>"<th>" + escapeHtml(h) + "</th>").join("") +
+    "</tr></thead><tbody>" + rows + "</tbody></table></div>";
+}
+
+function buildStatusSummary(){
+  const apps = loadApps();
+  if(!apps.length) return "Статусы обновлены. Заявок направлено не было.";
+  const lines = apps.map(a=> "• " + a.id + " — " + (a.princip || "—") + " · " + (a.amount || "—") + " " + (a.currency || "") + " — <b>" + escapeHtml(a.status) + "</b>");
+  return "Статусы обновлены:<br>" + lines.join("<br>");
 }
 
 /* ========== Demo auth ========== */
