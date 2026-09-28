@@ -186,6 +186,7 @@ tr:hover td{background:rgba(255,255,255,.03)}
 .pill.warn{background:rgba(255,180,84,.14);color:var(--warn)}
 .pill.info{background:rgba(212,35,47,.18);color:#ffc9c9}
 .pill.err{background:rgba(255,107,129,.14);color:var(--danger)}
+.status-empty{padding:30px 20px;text-align:center;color:var(--muted);font-size:15px}
 
 /* ===== CTA ===== */
 .cta{
@@ -515,20 +516,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-s
         <h3>📋 Заявки в банки-партнёры</h3>
         <button class="btn btn-ghost" onclick="openWindow('status')">Открыть в окне</button>
       </header>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr><th>№ заявки</th><th>Банк</th><th>Инструмент</th><th>Сумма</th><th>Статус</th><th>Обновлено</th></tr>
-          </thead>
-          <tbody>
-            <tr><td>APP-2417</td><td>Партнёр-Банк</td><td>Независимая гарантия</td><td>5 000 000 ₽</td><td><span class="pill ok">Одобрена</span></td><td>сегодня, 10:24</td></tr>
-            <tr><td>APP-2418</td><td>Торг-Банк</td><td>Аккредитив (безотзывный)</td><td>1 250 000 $</td><td><span class="pill warn">Запрошены документы</span></td><td>сегодня, 09:02</td></tr>
-            <tr><td>APP-2419</td><td>Партнёр-Банк</td><td>Гарантия платежа</td><td>800 000 ₽</td><td><span class="pill info">На рассмотрении</span></td><td>вчера, 17:40</td></tr>
-            <tr><td>APP-2420</td><td>Экспорт-Банк</td><td>Документарное инкассо</td><td>420 000 €</td><td><span class="pill err">Отклонена</span></td><td>вчера, 12:15</td></tr>
-            <tr><td>APP-2421</td><td>Торг-Банк</td><td>Аккредитив (отзывной)</td><td>300 000 $</td><td><span class="pill ok">Принята</span></td><td>2 дня назад</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <div class="table-wrap" id="statusSection"></div>
     </div>
   </div>
 </section>
@@ -892,6 +880,7 @@ function finishAppForm(){
   const app = Object.assign({ id: "APP-" + seq, type: formState.type, status: "Направлена" }, formState.answers);
   apps.push(app);
   saveApps(apps);
+  renderStatusSection();
   formState.step = 0;
   formState.answers = {};
   toast("Заявка успешно отправлена ✔");
@@ -924,6 +913,23 @@ function buildStatusSummary(){
   if(!apps.length) return "Статусы обновлены. Заявок направлено не было.";
   const lines = apps.map(a=> "• " + a.id + " — " + (a.princip || "—") + " · " + (a.amount || "—") + " " + (a.currency || "") + " — <b>" + escapeHtml(a.status) + "</b>");
   return "Статусы обновлены:<br>" + lines.join("<br>");
+}
+
+function statusSectionHTML(apps){
+  const keys = ["princip","benef","kind","amount","currency","period","deliveryDate","basis","format","comment","status"];
+  const headers = ["Наименование ПРИНЦИПАЛА","Наименование Бенефициара","Вид","Сумма","Валюта","Период действия","Дата предоставления","Основание для предоставления","Формат и способ направления","Комментарий","Статус"];
+  const rowHTML = a => "<tr>" + keys.map(k=>{
+    const v = escapeHtml(a[k] || "—");
+    return k === "status" ? "<td><span class='pill info'>" + v + "</span></td>" : "<td>" + v + "</td>";
+  }).join("") + "</tr>";
+  return "<table><thead><tr>" + headers.map(h=>"<th>" + escapeHtml(h) + "</th>").join("") + "</tr></thead><tbody>" + apps.map(rowHTML).join("") + "</tbody></table>";
+}
+
+function renderStatusSection(){
+  const el = document.getElementById("statusSection");
+  if(!el) return;
+  const apps = loadApps();
+  el.innerHTML = apps.length ? statusSectionHTML(apps) : "<div class='status-empty'>Заявок направлено не было</div>";
 }
 
 /* ========== Demo auth ========== */
@@ -965,6 +971,7 @@ if(localStorage.getItem("lukdoc_auth") !== "1"){
 
 /* greeting on first load */
 greet();
+renderStatusSection();
 </script>
 </body>
 </html>
