@@ -837,6 +837,10 @@ const FORMAT_CHOICES = [
   "Электронный документ, подписанный УКЭП, через сервис «Банковские гарантии» СББОЛ"
 ];
 const FORM_CHOICES = { period: PERIOD_CHOICES, deliveryDate: DATE_CHOICES, format: FORMAT_CHOICES };
+const KIND_CHOICES = {
+  "Заявка на банковскую гарантию": ["Тендерная гарантия","Гарантия исполнения контракта","Гарантия возврата аванса","Платёжная гарантия","Таможенная гарантия"],
+  "Заявка на аккредитив": ["Отзывный аккредитив","Безотзывный аккредитив"]
+};
 
 function startAppForm(q){
   formState = {
@@ -852,8 +856,16 @@ function askFormField(){
   const f = FORM_FIELDS[formState.step];
   if(!f){ finishAppForm(); return; }
   const n = formState.step + 1;
-  addMsg("bot", "<b>Заявка: " + escapeHtml(formState.type) + "</b><br>Шаг " + n + " из " + FORM_FIELDS.length + ". " + escapeHtml(f.label));
-  const choices = FORM_CHOICES[f.key];
+  let label = f.label;
+  let choices = FORM_CHOICES[f.key];
+  if(f.key === "kind"){
+    const kindOpts = KIND_CHOICES[formState.type] || KIND_CHOICES["Заявка на банковскую гарантию"];
+    label = (formState.type === "Заявка на аккредитив"
+      ? "Укажите ВИД — вид аккредитивных обязательств: "
+      : "Укажите ВИД — вид гарантируемых обязательств: ") + kindOpts.join(", ");
+    choices = kindOpts;
+  }
+  addMsg("bot", "<b>Заявка: " + escapeHtml(formState.type) + "</b><br><br>Шаг " + n + " из " + FORM_FIELDS.length + ". " + escapeHtml(label));
   if(choices) renderChoiceChips(choices); else chipsEl.innerHTML = "";
 }
 
