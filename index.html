@@ -894,8 +894,8 @@ function handleFormInput(value){
 function finishAppForm(){
   formState.active = false;
   const apps = loadApps();
-  const seq = (parseInt(localStorage.getItem(ns("seq")) || "2417", 10)) + 1;
-  localStorage.setItem(ns("seq"), String(seq));
+  const seq = (parseInt(localStorage.getItem("lukdoc_seq") || "2417", 10)) + 1;
+  localStorage.setItem("lukdoc_seq", String(seq));
   const app = Object.assign({ id: "APP-" + seq, type: formState.type, status: "Направлена" }, formState.answers);
   apps.push(app);
   saveApps(apps);
@@ -909,9 +909,9 @@ function finishAppForm(){
 }
 
 function loadApps(){
-  try{ return JSON.parse(localStorage.getItem(ns("apps")) || "[]"); }catch(e){ return []; }
+  try{ return JSON.parse(localStorage.getItem("lukdoc_apps") || "[]"); }catch(e){ return []; }
 }
-function saveApps(apps){ localStorage.setItem(ns("apps"), JSON.stringify(apps)); }
+function saveApps(apps){ localStorage.setItem("lukdoc_apps", JSON.stringify(apps)); }
 
 function buildAppsTableHTML(){
   const apps = loadApps();
@@ -976,7 +976,6 @@ const passInput = document.getElementById("passInput");
 const authError = document.getElementById("authError");
 
 function currentUser(){ return localStorage.getItem("lukdoc_user") || ""; }
-function ns(key){ return "lukdoc_" + key + "_" + (currentUser() || "guest"); }
 
 function doLogin(){
   const user = loginInput.value.trim();
@@ -1028,9 +1027,9 @@ document.getElementById("loginBtn").addEventListener("click", doLogin);
 
 /* ===== Отслеживание действий: Логин / вход / выход ===== */
 function loadSessions(){
-  try{ return JSON.parse(localStorage.getItem(ns("sessions")) || "[]"); }catch(e){ return []; }
+  try{ return JSON.parse(localStorage.getItem("lukdoc_sessions") || "[]"); }catch(e){ return []; }
 }
-function saveSessions(arr){ localStorage.setItem(ns("sessions"), JSON.stringify(arr)); }
+function saveSessions(arr){ localStorage.setItem("lukdoc_sessions", JSON.stringify(arr)); }
 function startSession(login){
   const sessions = loadSessions();
   sessions.push({ login: login, loginTime: new Date().toLocaleString("ru-RU"), logoutTime: "" });
