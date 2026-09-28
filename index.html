@@ -392,10 +392,10 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-s
     <div class="logo-mark">LUK</div>
     <h2>LUK&nbsp;Dock — вход</h2>
     <p class="auth-sub">Войдите, чтобы открыть рабочее окно</p>
-    <input id="loginInput" type="text" placeholder="Логин" autocomplete="username">
+    <input id="loginInput" type="text" placeholder="Логин (укажите имя)" autocomplete="username">
     <input id="passInput" type="password" placeholder="Пароль" autocomplete="current-password">
     <button class="btn btn-primary" id="loginBtn">Войти</button>
-    <div class="auth-error" id="authError">Неверный логин или пароль</div>
+    <div class="auth-error" id="authError">Неверный пароль</div>
   </div>
 </div>
 
@@ -410,6 +410,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-s
     </nav>
     <button class="btn btn-primary" onclick="openWindow()">Открыть окно →</button>
     <button class="burger" onclick="document.querySelector('.nav-links').style.display='flex'">☰</button>
+    <button class="btn btn-ghost auth-exit" onclick="exportReport()">Экспорт ▾</button>
     <button class="btn btn-ghost auth-exit" onclick="logout()">Выйти</button>
   </div>
 </header>
@@ -968,36 +969,105 @@ document.addEventListener("click", e=>{
 });
 
 /* ========== Demo auth ========== */
-const AUTH_USERS = { "user": "MCPB2026" };
+const APP_PASSWORD = "MCPB2026";
 const authOverlay = document.getElementById("authOverlay");
 const loginInput = document.getElementById("loginInput");
 const passInput = document.getElementById("passInput");
 const authError = document.getElementById("authError");
 
+/* ===== Session tracking (Логин / вход / выход) ===== */
+function loadSessions(){
+  try{ return JSON.parse(localStorage.getItem("lukdoc_sessions") || "[]"); }catch(e){ return []; }
+}
+function saveSessions(arr){ localStorage.setItem("lukdoc_sessions", JSON.stringify(arr)); }
+function startSession(login){
+  const sessions = loadSessions();
+  sessions.push({ login: login, loginTime: new Date().toLocaleString("ru-RU"), logoutTime: "" });
+  saveSessions(sessions);
+}
+function endSession(){
+  const sessions = loadSessions();
+  if(sessions.length && !sessions[sessions.length-1].logoutTime){
+    sessions[sessions.length-1].logoutTime = new Date().toLocaleString("ru-RU");
+    saveSessions(sessions);
+  }
+}
+
 function doLogin(){
-  const user = loginInput.value.trim().toLowerCase();
+  const user = loginInput.value.trim();
   const pass = passInput.value;
-  if(AUTH_USERS[user] && AUTH_USERS[user] === pass){
-    localStorage.setItem("lukdoc_auth", "1");
-    authOverlay.classList.add("hidden");
-    document.body.style.overflow = "";
-    loginInput.value = ""; passInput.value = ""; authError.classList.remove("show");
-  } else {
+  if(!user){
+    authError.textContent = "Укажите логин — поле не может быть пустым";
+    authError.classList.add("show");
+    loginInput.focus();
+    return;
+  }
+  if(pass !== APP_PASSWORD){
+    authError.textContent = "Неверный пароль";
     authError.classList.add("show");
     passInput.value = "";
     passInput.focus();
+    return;
   }
+  startSession(user);
+  localStorage.setItem("lukdoc_auth", "1");
+  authOverlay.classList.add("hidden");
+  document.body.style.overflow = "";
+  loginInput.value = ""; passInput.value = ""; authError.classList.remove("show");
+  toast("Добро пожаловать, " + user);
 }
 function logout(){
+  endSession();
   localStorage.removeItem("lukdoc_auth");
   authOverlay.classList.remove("hidden");
   document.body.style.overflow = "hidden";
+  authError.classList.remove("show");
+  loginInput.value = ""; passInput.value = "";
   loginInput.focus();
+  downloadReport();
 }
 document.getElementById("loginBtn").addEventListener("click", doLogin);
 [loginInput, passInput].forEach(el=>{
   el.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); doLogin(); } });
 });
+
+/* ===== Экспорт действий пользователя в Excel ===== */
+function loadXLSX(cb){
+  if(window.XLSX){ cb(); return; }
+  const s = document.createElement("script");
+  s.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+  s.onload = cb;
+  s.onerror = function(){ toast("Не удалось загрузить библиотеку Excel"); };
+  document.head.appendChild(s);
+}
+function downloadReport(){
+  const sessions = loadSessions();
+  const apps = loadApps();
+  if(!sessions.length && !apps.length){ toast("Нет данных для экспорта"); return; }
+  loadXLSX(function(){
+    const wb = XLSX.utils.book_new();
+    const sessRows = sessions.map(function(s){
+      return [ s.login, s.loginTime, s.logoutTime || "—" ];
+    });
+    if(!sessRows.length) sessRows.push(["—","—","—"]);
+    const ws1 = XLSX.utils.aoa_to_sheet([["Логин","Время входа","Время выхода"]].concat(sessRows));
+    ws1["!cols"] = [{wch:20},{wch:22},{wch:22}];
+    XLSX.utils.book_append_sheet(wb, ws1, "Сессии");
+    if(apps.length){
+      const keys = ["princip","benef","kind","amount","currency","period","deliveryDate","basis","format","comment","status"];
+      const headers = ["Заявка","Наименование ПРИНЦИПАЛА","Наименование Бенефициара","Вид","Сумма","Валюта","Период действия","Дата предоставления","Основание для предоставления","Формат и способ направления","Комментарий","Статус"];
+      const data = apps.map(function(a){
+        return [a.id].concat(keys.map(function(k){ return a[k] || "—"; }));
+      });
+      const ws2 = XLSX.utils.aoa_to_sheet([headers].concat(data));
+      ws2["!cols"] = [{wch:10},{wch:28},{wch:28},{wch:22},{wch:12},{wch:10},{wch:38},{wch:38},{wch:40},{wch:40},{wch:28},{wch:14}];
+      XLSX.utils.book_append_sheet(wb, ws2, "Заявки в банки-партнёры");
+    }
+    XLSX.writeFile(wb, "Отчёт_действий_пользователя_" + new Date().toISOString().slice(0,10) + ".xlsx");
+    toast("Файл Excel сформирован");
+  });
+}
+function exportReport(){ downloadReport(); }
 
 if(localStorage.getItem("lukdoc_auth") !== "1"){
   document.body.style.overflow = "hidden";
