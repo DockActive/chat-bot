@@ -187,6 +187,13 @@ tr:hover td{background:rgba(255,255,255,.03)}
 .pill.info{background:rgba(212,35,47,.18);color:#ffc9c9}
 .pill.err{background:rgba(255,107,129,.14);color:var(--danger)}
 .status-empty{padding:30px 20px;text-align:center;color:var(--muted);font-size:15px}
+#statusSection th,#statusSection td{padding:8px 12px;font-size:13px}
+#statusSection th{font-size:11px;white-space:nowrap}
+.del-app{
+  background:rgba(255,107,129,.12);border:1px solid rgba(255,107,129,.35);color:var(--danger);
+  border-radius:8px;padding:3px 10px;font-size:12px;cursor:pointer;font-family:inherit;transition:.15s;
+}
+.del-app:hover{background:rgba(255,107,129,.25)}
 
 /* ===== CTA ===== */
 .cta{
@@ -296,9 +303,9 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-s
 .cmsg .text li{margin-bottom:3px}
 .cmsg.card-msg .text{width:100%;max-width:520px}
 .scroller{overflow-x:auto;max-width:100%}
-.mini-table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px;min-width:0}
-.mini-table th,.mini-table td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left}
-.mini-table th{color:var(--muted);font-size:11px;text-transform:uppercase}
+.mini-table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12.5px;min-width:0}
+.mini-table th,.mini-table td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+.mini-table th{color:var(--muted);font-size:10.5px;text-transform:uppercase;white-space:nowrap}
 .quick-actions{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 12px}
 .chip{
   font-size:12.6px;padding:7px 13px;border-radius:999px;cursor:pointer;
@@ -897,11 +904,11 @@ function buildAppsTableHTML(){
   const apps = loadApps();
   if(!apps.length) return "Заявок направлено не было.";
   const keys = ["princip","benef","kind","amount","currency","period","deliveryDate","basis","format","comment"];
-  const headers = ["Наименование ПРИНЦИПАЛА","Наименование Бенефициара","Вид","Сумма","Валюта","Период действия","Дата предоставления","Основание для предоставления","Формат и способ направления","Комментарий","Статус"];
+  const headers = ["Наименование ПРИНЦИПАЛА","Наименование Бенефициара","Вид","Сумма","Валюта","Период действия","Дата предоставления","Основание для предоставления","Формат и способ направления","Комментарий","Статус","Действие"];
   let rows = "";
   apps.forEach(a=>{
     const cells = keys.map(k=>"<td>" + escapeHtml(a[k] || "—") + "</td>").join("");
-    rows += "<tr>" + cells + "<td><span class='pill info'>" + escapeHtml(a.status) + "</span></td></tr>";
+    rows += "<tr>" + cells + "<td><span class='pill info'>" + escapeHtml(a.status) + "</span></td><td><button class='del-app' data-id='" + a.id + "' title='Удалить заявку'>✕</button></td></tr>";
   });
   return "<div class='scroller'><table class='mini-table'><thead><tr>" +
     headers.map(h=>"<th>" + escapeHtml(h) + "</th>").join("") +
@@ -917,11 +924,11 @@ function buildStatusSummary(){
 
 function statusSectionHTML(apps){
   const keys = ["princip","benef","kind","amount","currency","period","deliveryDate","basis","format","comment","status"];
-  const headers = ["Наименование ПРИНЦИПАЛА","Наименование Бенефициара","Вид","Сумма","Валюта","Период действия","Дата предоставления","Основание для предоставления","Формат и способ направления","Комментарий","Статус"];
+  const headers = ["Наименование ПРИНЦИПАЛА","Наименование Бенефициара","Вид","Сумма","Валюта","Период действия","Дата предоставления","Основание для предоставления","Формат и способ направления","Комментарий","Статус","Действие"];
   const rowHTML = a => "<tr>" + keys.map(k=>{
     const v = escapeHtml(a[k] || "—");
     return k === "status" ? "<td><span class='pill info'>" + v + "</span></td>" : "<td>" + v + "</td>";
-  }).join("") + "</tr>";
+  }).join("") + "<td><button class='del-app' data-id='" + a.id + "' title='Удалить заявку'>✕</button></td></tr>";
   return "<table><thead><tr>" + headers.map(h=>"<th>" + escapeHtml(h) + "</th>").join("") + "</tr></thead><tbody>" + apps.map(rowHTML).join("") + "</tbody></table>";
 }
 
@@ -931,6 +938,22 @@ function renderStatusSection(){
   const apps = loadApps();
   el.innerHTML = apps.length ? statusSectionHTML(apps) : "<div class='status-empty'>Заявок направлено не было</div>";
 }
+
+function deleteApp(id){
+  const apps = loadApps().filter(a=>a.id !== id);
+  saveApps(apps);
+  renderStatusSection();
+  if(currentTask === "status"){
+    messagesEl.innerHTML = "";
+    greet();
+  }
+  toast("Заявка " + id + " удалена");
+}
+document.addEventListener("click", e=>{
+  const btn = e.target.closest(".del-app");
+  if(!btn) return;
+  if(confirm("Удалить заявку " + btn.dataset.id + "?")) deleteApp(btn.dataset.id);
+});
 
 /* ========== Demo auth ========== */
 const AUTH_USERS = { "user": "MCPB2026" };
