@@ -894,9 +894,12 @@ function handleFormInput(value){
 function finishAppForm(){
   formState.active = false;
   const apps = loadApps();
-  const seq = (parseInt(localStorage.getItem("lukdoc_seq") || "2417", 10)) + 1;
-  localStorage.setItem("lukdoc_seq", String(seq));
-  const app = Object.assign({ id: "APP-" + seq, type: formState.type, status: "Направлена" }, formState.answers);
+  let maxN = 0;
+  apps.forEach(function(a){
+    const m = String(a.id || "").match(/(\d+)$/);
+    if(m){ const n = parseInt(m[1], 10); if(!isNaN(n) && n > maxN) maxN = n; }
+  });
+  const app = Object.assign({ id: "APP-" + (maxN + 1), type: formState.type, status: "Направлена" }, formState.answers);
   apps.push(app);
   saveApps(apps);
   recordAppOnline(app);
