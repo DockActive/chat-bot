@@ -367,7 +367,8 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-s
 .auth-card .btn{width:100%;justify-content:center;margin-top:4px}
 .auth-error{display:none;color:var(--danger);font-size:13px;margin-top:12px}
 .auth-error.show{display:block}
-.auth-exit{padding:8px 14px;font-size:13.5px}
+.auth-exit{display:none;padding:8px 14px;font-size:13.5px}
+body.is-auth .auth-exit{display:inline-flex}
 
 @media(max-width:960px){
   .hero-grid{grid-template-columns:1fr}
@@ -977,6 +978,9 @@ const authError = document.getElementById("authError");
 
 function currentUser(){ return localStorage.getItem("lukdoc_user") || ""; }
 function ns(key){ return "lukdoc_" + key + "_" + (currentUser() || "guest"); }
+function setAuthUI(){
+  document.body.classList.toggle("is-auth", localStorage.getItem("lukdoc_auth") === "1");
+}
 
 function doLogin(){
   const user = loginInput.value.trim();
@@ -997,6 +1001,8 @@ function doLogin(){
   localStorage.setItem("lukdoc_auth", "1");
   localStorage.setItem("lukdoc_user", user);
   startSession(user);
+  setAuthUI();
+  loadXLSX(function(){});
   authOverlay.classList.add("hidden");
   document.body.style.overflow = "";
   loginInput.value = ""; passInput.value = ""; authError.classList.remove("show");
@@ -1014,6 +1020,7 @@ function logout(){
   downloadReport(data);
   localStorage.removeItem("lukdoc_auth");
   localStorage.removeItem("lukdoc_user");
+  setAuthUI();
   authOverlay.classList.remove("hidden");
   document.body.style.overflow = "hidden";
   authError.classList.remove("show");
@@ -1086,9 +1093,12 @@ function downloadReport(data){
 }
 function exportReport(){ downloadReport(); }
 
+setAuthUI();
 if(localStorage.getItem("lukdoc_auth") !== "1"){
   document.body.style.overflow = "hidden";
   loginInput.focus();
+} else {
+  loadXLSX(function(){});
 }
 
 /* greeting on first load */
