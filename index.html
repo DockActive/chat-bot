@@ -894,8 +894,8 @@ function handleFormInput(value){
 function finishAppForm(){
   formState.active = false;
   const apps = loadApps();
-  const seq = (parseInt(localStorage.getItem("lukdoc_seq") || "2417", 10)) + 1;
-  localStorage.setItem("lukdoc_seq", String(seq));
+  const seq = (parseInt(localStorage.getItem(ns("seq")) || "2417", 10)) + 1;
+  localStorage.setItem(ns("seq"), String(seq));
   const app = Object.assign({ id: "APP-" + seq, type: formState.type, status: "Направлена" }, formState.answers);
   apps.push(app);
   saveApps(apps);
@@ -908,9 +908,9 @@ function finishAppForm(){
 }
 
 function loadApps(){
-  try{ return JSON.parse(localStorage.getItem("lukdoc_apps") || "[]"); }catch(e){ return []; }
+  try{ return JSON.parse(localStorage.getItem(ns("apps")) || "[]"); }catch(e){ return []; }
 }
-function saveApps(apps){ localStorage.setItem("lukdoc_apps", JSON.stringify(apps)); }
+function saveApps(apps){ localStorage.setItem(ns("apps"), JSON.stringify(apps)); }
 
 function buildAppsTableHTML(){
   const apps = loadApps();
@@ -968,30 +968,51 @@ document.addEventListener("click", e=>{
 });
 
 /* ========== Demo auth ========== */
-const AUTH_USERS = { "user": "MCPB2026" };
+const APP_PASSWORD = "MCPB2026";
 const authOverlay = document.getElementById("authOverlay");
 const loginInput = document.getElementById("loginInput");
 const passInput = document.getElementById("passInput");
 const authError = document.getElementById("authError");
 
+function currentUser(){ return localStorage.getItem("lukdoc_user") || ""; }
+function ns(key){ return "lukdoc_" + key + "_" + (currentUser() || "guest"); }
+
 function doLogin(){
-  const user = loginInput.value.trim().toLowerCase();
+  const user = loginInput.value.trim();
   const pass = passInput.value;
-  if(AUTH_USERS[user] && AUTH_USERS[user] === pass){
-    localStorage.setItem("lukdoc_auth", "1");
-    authOverlay.classList.add("hidden");
-    document.body.style.overflow = "";
-    loginInput.value = ""; passInput.value = ""; authError.classList.remove("show");
-  } else {
+  if(!user){
+    authError.textContent = "Укажите логин — поле не может быть пустым";
+    authError.classList.add("show");
+    loginInput.focus();
+    return;
+  }
+  if(pass !== APP_PASSWORD){
+    authError.textContent = "Неверный пароль";
     authError.classList.add("show");
     passInput.value = "";
     passInput.focus();
+    return;
+  }
+  localStorage.setItem("lukdoc_auth", "1");
+  localStorage.setItem("lukdoc_user", user);
+  authOverlay.classList.add("hidden");
+  document.body.style.overflow = "";
+  loginInput.value = ""; passInput.value = ""; authError.classList.remove("show");
+  const savedApps = loadApps();
+  renderStatusSection();
+  if(savedApps.length){
+    toast("Добро пожаловать, " + user + " — заявок: " + savedApps.length);
+  } else {
+    toast("Добро пожаловать, " + user);
   }
 }
 function logout(){
   localStorage.removeItem("lukdoc_auth");
+  localStorage.removeItem("lukdoc_user");
   authOverlay.classList.remove("hidden");
   document.body.style.overflow = "hidden";
+  authError.classList.remove("show");
+  loginInput.value = ""; passInput.value = "";
   loginInput.focus();
 }
 document.getElementById("loginBtn").addEventListener("click", doLogin);
