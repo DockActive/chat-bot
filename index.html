@@ -899,6 +899,7 @@ function finishAppForm(){
   const app = Object.assign({ id: "APP-" + seq, type: formState.type, status: "Направлена" }, formState.answers);
   apps.push(app);
   saveApps(apps);
+  recordAppOnline(app);
   renderStatusSection();
   formState.step = 0;
   formState.answers = {};
@@ -1006,11 +1007,13 @@ function doLogin(){
   } else {
     toast("Добро пожаловать, " + user);
   }
+  recordLoginOnline(user);
+  syncAppsRemote();
 }
 function logout(){
   endSession();
-  const data = buildReportData();
-  downloadReport(data);
+  pushLogoutTime();
+  downloadReport();
   localStorage.removeItem("lukdoc_auth");
   localStorage.removeItem("lukdoc_user");
   authOverlay.classList.remove("hidden");
@@ -1042,38 +1045,148 @@ function endSession(){
   }
 }
 
-/* ===== Отчёт в табличной форме (CSV, только данные текущего пользователя) ===== */
-function buildReportData(){
-  return { user: currentUser(), sessions: loadSessions(), apps: loadApps() };
+/* ===== Supabase (централизованное отслеживание) ===== */
+const SUPABASE_URL = "https://okwwgpigdwvuznklovyo.supabase.co";
+const SUPABASE_KEY = "sb_publishable_G32xjQKWHsnDUVDfJku3tg_LTIMrnQ9";
+
+function loadSupabaseScript(cb){
+  if(window.supabase){ cb(window.supabase); return; }
+  const s = document.createElement("script");
+  s.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.1/dist/umd/supabase.min.js";
+  s.onload = function(){ cb(window.supabase); };
+  s.onerror = function(){ cb(null); };
+  document.head.appendChild(s);
 }
-function downloadReport(data){
-  data = data || buildReportData();
-  if(!data.sessions.length && !data.apps.length){ toast("Нет данных для экспорта"); return; }
-  const esc = function(v){ return '"' + String(v == null ? "" : v).replace(/"/g,'""') + '"'; };
-  const lines = [];
-  lines.push(["Логин","Время входа","Время выхода","Заявки в банки-партнёры"].join(";"));
-  data.sessions.forEach(function(s){
-    const summary = data.apps.length
-      ? data.apps.map(function(a){ return a.id + " (" + a.kind + " — " + a.amount + " " + a.currency + ")"; }).join("; ")
-      : "—";
-    lines.push([ s.login, s.loginTime, s.logoutTime || "—", summary ].map(esc).join(";"));
+function getSupabase(cb){
+  if(window.__sbClient){ cb(window.__sbClient); return; }
+  loadSupabaseScript(function(sup){
+    if(sup){ window.__sbClient = sup.createClient(SUPABASE_URL, SUPABASE_KEY); cb(window.__sbClient); }
+    else cb(null);
   });
-  lines.push("");
-  lines.push(["Заявка","Наименование ПРИНЦИПАЛА","Наименование Бенефициара","Вид","Сумма","Валюта","Период действия","Дата предоставления","Основание для предоставления","Формат и способ направления","Комментарий","Статус"].join(";"));
-  const keys = ["princip","benef","kind","amount","currency","period","deliveryDate","basis","format","comment","status"];
-  data.apps.forEach(function(a){
-    lines.push([ a.id ].concat(keys.map(function(k){ return (a[k] || "—"); })).map(esc).join(";"));
+}
+function fmtTime(iso){
+  if(!iso) return "";
+  try{ return new Date(iso).toLocaleString("ru-RU"); }catch(e){ return iso; }
+}
+function recordLoginOnline(login){
+  localStorage.removeItem("lukdoc_sb_session");
+  getSupabase(function(client){
+    if(!client) return;
+    client.from("sessions").insert({
+      login: login,
+      login_time: new Date().toISOString(),
+      logout_time: null,
+      device: (navigator.userAgent || "").slice(0, 140)
+    }).select("id").then(function(res){
+      if(!res.error && res.data && res.data[0]) localStorage.setItem("lukdoc_sb_session", String(res.data[0].id));
+    });
   });
-  const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "Отчёт_" + (data.user || "guest") + "_" + new Date().toISOString().slice(0,10) + ".csv";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
-  toast("Файл CSV сформирован");
+}
+function pushLogoutTime(){
+  const id = localStorage.getItem("lukdoc_sb_session");
+  if(!id) return;
+  getSupabase(function(client){
+    if(!client) return;
+    client.from("sessions").update({ logout_time: new Date().toISOString() }).eq("id", id).then(function(){
+      localStorage.removeItem("lukdoc_sb_session");
+    });
+  });
+}
+function recordAppOnline(app){
+  getSupabase(function(client){
+    if(!client) return;
+    client.from("apps").insert({
+      app_id: app.id,
+      login: currentUser(),
+      type: app.type,
+      status: app.status,
+      data: Object.assign({}, app)
+    }).then(null);
+  });
+}
+function syncAppsRemote(){
+  const localApps = loadApps();
+  getSupabase(function(client){
+    if(!client) return;
+    const user = currentUser();
+    if(!user) return;
+    client.from("apps").select("app_id,type,status,data").eq("login", user).then(function(res){
+      if(res.error) return;
+      const remote = (res.data || []).map(function(r){
+        return Object.assign({ id: r.app_id, type: r.type, status: r.status }, r.data || {});
+      });
+      const merged = remote.slice();
+      localApps.forEach(function(a){
+        if(!merged.some(function(m){ return m.id === a.id; })) merged.push(a);
+      });
+      saveApps(merged);
+      localApps.forEach(function(a){
+        if(!remote.some(function(r){ return r.id === a.id; })){
+          client.from("apps").insert({ app_id: a.id, login: user, type: a.type, status: a.status, data: Object.assign({}, a) }).then(null);
+        }
+      });
+      renderStatusSection();
+    });
+  });
+}
+
+/* ===== Отчёт в табличной форме (CSV, со всех устройств) ===== */
+function collectReportData(cb){
+  const local = { user: currentUser(), sessions: loadSessions(), apps: loadApps() };
+  getSupabase(function(client){
+    if(!client){ cb(local); return; }
+    Promise.all([
+      client.from("sessions").select("*").eq("login", local.user).order("login_time", { ascending: true }),
+      client.from("apps").select("app_id,type,status,data").eq("login", local.user).order("created_at", { ascending: true })
+    ]).then(function(results){
+      if(results[0].error || results[1].error){ cb(local); return; }
+      const remoteS = (results[0].data || []).map(function(r){
+        return { login: r.login, loginTime: fmtTime(r.login_time), logoutTime: r.logout_time ? fmtTime(r.logout_time) : "" };
+      });
+      const remoteA = (results[1].data || []).map(function(r){
+        return Object.assign({ id: r.app_id, type: r.type, status: r.status }, r.data || {});
+      });
+      const mergedA = remoteA.slice();
+      local.apps.forEach(function(a){
+        if(!mergedA.some(function(m){ return m.id === a.id; })) mergedA.push(a);
+      });
+      cb({
+        user: local.user,
+        sessions: remoteS.length ? remoteS : local.sessions,
+        apps: mergedA
+      });
+    }).catch(function(){ cb(local); });
+  });
+}
+function downloadReport(){
+  collectReportData(function(data){
+    if(!data.sessions.length && !data.apps.length){ toast("Нет данных для экспорта"); return; }
+    const esc = function(v){ return '"' + String(v == null ? "" : v).replace(/"/g,'""') + '"'; };
+    const lines = [];
+    lines.push(["Логин","Время входа","Время выхода","Заявки в банки-партнёры"].join(";"));
+    data.sessions.forEach(function(s){
+      const summary = data.apps.length
+        ? data.apps.map(function(a){ return a.id + " (" + a.kind + " — " + a.amount + " " + a.currency + ")"; }).join("; ")
+        : "—";
+      lines.push([ s.login, s.loginTime, s.logoutTime || "—", summary ].map(esc).join(";"));
+    });
+    lines.push("");
+    lines.push(["Заявка","Наименование ПРИНЦИПАЛА","Наименование Бенефициара","Вид","Сумма","Валюта","Период действия","Дата предоставления","Основание для предоставления","Формат и способ направления","Комментарий","Статус"].join(";"));
+    const keys = ["princip","benef","kind","amount","currency","period","deliveryDate","basis","format","comment","status"];
+    data.apps.forEach(function(a){
+      lines.push([ a.id ].concat(keys.map(function(k){ return (a[k] || "—"); })).map(esc).join(";"));
+    });
+    const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Отчёт_" + (data.user || "guest") + "_" + new Date().toISOString().slice(0,10) + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
+    toast("Файл CSV сформирован");
+  });
 }
 
 if(localStorage.getItem("lukdoc_auth") !== "1"){
