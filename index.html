@@ -1013,7 +1013,6 @@ function doLogin(){
 function logout(){
   endSession();
   pushLogoutTime();
-  downloadReport();
   localStorage.removeItem("lukdoc_auth");
   localStorage.removeItem("lukdoc_user");
   authOverlay.classList.remove("hidden");
