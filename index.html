@@ -382,7 +382,14 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-s
   }
   .nav-links a{padding:9px 4px;white-space:nowrap}
   .burger{display:block}
-  .win-side{display:none}
+  .win-body{flex-direction:column}
+  .win-side{
+    width:100%;border-right:0;border-bottom:1px solid var(--line);
+    flex-direction:row;align-items:center;gap:8px;overflow-x:auto;
+    overflow-y:hidden;max-height:none;flex:none;padding:10px 12px;
+  }
+  .win-side .side-label{display:none}
+  .side-item{flex:0 0 auto;white-space:nowrap;padding:8px 12px}
 }
 @media(max-width:640px){
   .cards,.flow{grid-template-columns:1fr}
