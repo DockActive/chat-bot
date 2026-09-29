@@ -41,7 +41,7 @@ header{
   background:rgba(26,11,11,.72);
   border-bottom:1px solid var(--line);
 }
-.nav{display:flex;align-items:center;justify-content:space-between;padding:14px 0;gap:16px}
+.nav{display:flex;align-items:center;justify-content:space-between;padding:14px 0;gap:16px;position:relative}
 .logo{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.3px}
 .logo-mark{
   width:auto;height:36px;padding:0 12px;border-radius:10px;
@@ -373,7 +373,14 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-s
   .hero-grid{grid-template-columns:1fr}
   .cards{grid-template-columns:1fr 1fr}
   .flow{grid-template-columns:1fr 1fr}
-  .nav-links{display:none}
+  .nav-links{
+    display:none;position:absolute;right:0;top:calc(100% + 10px);
+    flex-direction:column;align-items:stretch;gap:4px;
+    background:#1d0f10;border:1px solid var(--line);border-radius:14px;
+    padding:10px 14px;min-width:230px;z-index:70;
+    box-shadow:0 20px 50px rgba(0,0,0,.5);
+  }
+  .nav-links a{padding:9px 4px;white-space:nowrap}
   .burger{display:block}
   .win-side{display:none}
 }
@@ -409,7 +416,7 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--muted);font-s
       <a href="#cta">Контакты</a>
     </nav>
     <button class="btn btn-primary" onclick="openWindow()">Открыть окно →</button>
-    <button class="burger" onclick="document.querySelector('.nav-links').style.display='flex'">☰</button>
+    <button class="burger" onclick="toggleMenu(event)">☰</button>
     <button class="btn btn-ghost auth-exit" onclick="logout()">Выйти</button>
   </div>
 </header>
@@ -1195,6 +1202,18 @@ if(localStorage.getItem("lukdoc_auth") !== "1"){
   document.body.style.overflow = "hidden";
   loginInput.focus();
 }
+
+function toggleMenu(e){
+  e.stopPropagation();
+  const nl = document.querySelector(".nav-links");
+  if(!nl) return;
+  nl.style.display = nl.style.display === "flex" ? "none" : "flex";
+}
+document.addEventListener("click", function(e){
+  const nl = document.querySelector(".nav-links");
+  if(!nl || nl.style.display !== "flex" || window.innerWidth > 960) return;
+  if(!nl.contains(e.target)) nl.style.display = "none";
+});
 
 /* greeting on first load */
 greet();
